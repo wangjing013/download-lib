@@ -238,7 +238,10 @@ class Download {
       this.changeStatus(STATUS.FINISHED);
       this.mergeAndDownload();
     } catch (error) {
-      console.error(error);
+      const err = error as unknown as Error;
+      if (err && err.name === 'AbortError') {
+        return;
+      }
       this.changeStatus(STATUS.ERROR, error);
     }
   }
