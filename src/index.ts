@@ -1,5 +1,6 @@
 import localforage from 'localforage';
 import { md5 } from 'js-md5';
+import streamsaver from 'streamsaver';
 
 export type DownloadOptions = {
   url: string;
@@ -35,7 +36,7 @@ class Download {
   abortController?: AbortController;
   currentChunk: number = 0;
   chunkSize: number;
-  totalChunk: number = 1;
+  totalChunk: number = 0;
   totalSize: number = 0;
   status: STATUS = STATUS.PENDING;
   onReady: DownloadOptions['onReady'];
@@ -58,6 +59,10 @@ class Download {
     this.onProgressUpdate = onProgressUpdate;
     this.onStatusChange = onStatusChange;
     this.openDB();
+  }
+
+  static setMitmPath(path: string) {
+    streamsaver.mitm = path;
   }
 
   changeStatus(value: STATUS, error: any = null) {
@@ -173,6 +178,12 @@ class Download {
     this.onProgressUpdate?.(percent);
   }
 
+  resetState() {
+    this.currentChunk = 0;
+    this.updateProgress();
+    this.changeStatus(STATUS.PENDING);
+  }
+
   start() {
     if (!this.isReady) {
       return;
@@ -194,10 +205,7 @@ class Download {
 
   async cancel() {
     this.abort();
-    this.currentChunk = 0;
-    this.totalChunk = 1;
-    this.updateProgress();
-    this.changeStatus(STATUS.PENDING);
+    this.resetState();
     this.remove();
   }
 
@@ -219,6 +227,7 @@ class Download {
     try {
       const concurrency = 4;
       const pool: Promise<any>[] = [];
+
       const run = async (currentChunk: number) => {
         await this.uploadSingeChunk(currentChunk);
       };
@@ -252,40 +261,42 @@ class Download {
   }
 
   async mergeAndDownload() {
-    try {
-      // 校验数据完整
-      const completed = await this.getCompletedCount();
-      if (completed < this.totalChunk) {
-        this.changeStatus(
-          STATUS.ERROR,
-          new Error(`下载不完整，请取消再重新下载`),
-        );
-        return;
-      }
+    // 校验数据完整
+    const completed = await this.getCompletedCount();
+    if (completed < this.totalChunk) {
+      this.changeStatus(
+        STATUS.ERROR,
+        new Error(`下载不完整，请取消再重新下载`),
+      );
+      return;
+    }
+    const fileStream = streamsaver.createWriteStream(this.fileName, {
+      size: this.totalSize,
+    });
+    const writer = fileStream.getWriter();
+    const md5 = this.getURLMd5();
 
-      const md5 = this.getURLMd5();
-      const promises: Promise<any>[] = [];
+    try {
       for (let i = 0; i < this.totalChunk; i++) {
-        promises.push(localforage.getItem(`${md5}_${i}`));
+        const blob = (await localforage.getItem(`${md5}_${i}`)) as Blob;
+        if (!blob) throw new Error(`Chunk ${i} missed!`);
+        const reader = (blob as Blob).stream().getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await writer.write(value);
+        }
       }
-      const blobs = (await Promise.all(promises)) as Blob[];
-      const blob = new Blob(blobs);
-      const tempURL = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = tempURL;
-      a.download = this.fileName;
-      document.body.append(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(tempURL);
+      await writer.close();
 
       // fix: Safari 的 new Blob([blob1, blob2, ...]) 并不保证立即深拷贝所有数据，它在内存压力大时会偷偷保留对原 BlobPart 的引用，等真正需要写入磁盘时再去读。
       setTimeout(async () => {
         await this.remove(); // 删 IndexedDB 中的 chunk
-        this.changeStatus(STATUS.PENDING); // 恢复初始状态
+        this.resetState();
       }, 2000);
-    } catch (error) {
-      this.changeStatus(STATUS.ERROR, error);
+    } catch (err) {
+      this.changeStatus(STATUS.ERROR, err);
+      writer.abort && writer.abort(err); // 兼容 StreamSaver
     }
   }
 

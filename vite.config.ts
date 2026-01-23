@@ -5,6 +5,9 @@ import vue from '@vitejs/plugin-vue';
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    host: '0.0.0.0',
+  },
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
@@ -12,6 +15,7 @@ export default defineConfig({
       fileName: 'download-lib',
     },
     outDir: 'lib',
+    emptyOutDir: true,
   },
   plugins: [
     vue(),

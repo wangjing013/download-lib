@@ -5,9 +5,10 @@
     "": {
       "name": "download-lib",
       "dependencies": {
+        "@types/streamsaver": "^2.0.5",
         "js-md5": "^0.8.3",
         "localforage": "^1.10.0",
-        "vue": "^3.5.24",
+        "streamsaver": "^2.0.6",
       },
       "devDependencies": {
         "@types/node": "^24.10.1",
@@ -16,6 +17,7 @@
         "typescript": "~5.9.3",
         "vite": "^7.2.4",
         "vite-plugin-dts": "^4.5.4",
+        "vue": "^3.5.27",
         "vue-tsc": "^3.1.4",
       },
     },
@@ -164,6 +166,8 @@
     "@types/estree": ["@types/estree@1.0.8", "https://registry.npmmirror.com/@types/estree/-/estree-1.0.8.tgz", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
 
     "@types/node": ["@types/node@24.10.9", "https://registry.npmmirror.com/@types/node/-/node-24.10.9.tgz", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-ne4A0IpG3+2ETuREInjPNhUGis1SFjv1d5asp8MzEAGtOZeTeHVDOYqOgqfhvseqg/iXty2hjBf1zAOb7RNiNw=="],
+
+    "@types/streamsaver": ["@types/streamsaver@2.0.5", "https://registry.npmmirror.com/@types/streamsaver/-/streamsaver-2.0.5.tgz", {}, "sha512-93o0zjV8swEhR2YI57h/2ytbJF8bJh7sI9GNB02TLJHdM4fWDxZuChwfWhyD8vt2ub4kw4rsfZ0C0yAUX+3gcg=="],
 
     "@vitejs/plugin-vue": ["@vitejs/plugin-vue@6.0.3", "https://registry.npmmirror.com/@vitejs/plugin-vue/-/plugin-vue-6.0.3.tgz", { "dependencies": { "@rolldown/pluginutils": "1.0.0-beta.53" }, "peerDependencies": { "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0", "vue": "^3.2.25" } }, "sha512-TlGPkLFLVOY3T7fZrwdvKpjprR3s4fxRln0ORDo1VQ7HHyxJwTlrjKU3kpVWTlaAjIEuCTokmjkZnr8Tpc925w=="],
 
@@ -320,6 +324,8 @@
     "source-map-js": ["source-map-js@1.2.1", "https://registry.npmmirror.com/source-map-js/-/source-map-js-1.2.1.tgz", {}, "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA=="],
 
     "sprintf-js": ["sprintf-js@1.0.3", "https://registry.npmmirror.com/sprintf-js/-/sprintf-js-1.0.3.tgz", {}, "sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g=="],
+
+    "streamsaver": ["streamsaver@2.0.6", "https://registry.npmmirror.com/streamsaver/-/streamsaver-2.0.6.tgz", {}, "sha512-LK4e7TfCV8HzuM0PKXuVUfKyCB1FtT9L0EGxsFk5Up8njj0bXK8pJM9+Wq2Nya7/jslmCQwRK39LFm55h7NBTw=="],
 
     "string-argv": ["string-argv@0.3.2", "https://registry.npmmirror.com/string-argv/-/string-argv-0.3.2.tgz", {}, "sha512-aqD2Q0144Z+/RqG52NeHEkZauTAUWJO8c6yTftGJKO3Tja5tUgIfmIl6kExvhtxSDP7fXB6DvzkfMpCd/F3G+Q=="],
 

@@ -5,6 +5,8 @@ import Download, { type STATUS} from '../../src/index'
 const isReady = ref<boolean>(false)
 const progress = ref<string>('0')
 const status = ref<STATUS>()
+
+Download.setMitmPath('http://localhost:5173/mitm.html')
 const download = new Download({
   url: "https://oss-cdn.mashibing.com/course_attachment/127/IDEA2019.zip",
   fileName: "IDEA2019.zip",
