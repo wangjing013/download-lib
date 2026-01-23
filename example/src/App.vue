@@ -27,7 +27,7 @@ const chunkSize = 10 * 1024 * 1024;
 const getFileSize = async (index: number) => {
   const start = index * chunkSize;
   const end = start + chunkSize
-  await axios.get("https://oss-cdn.mashibing.com/course_attachment/127/IDEA2019.zip", {
+  await axios.get("https://msb-edu-prod.oss-cn-beijing.aliyuncs.com/course_attachment/1646/tomcat-8.5.rar", {
     responseType: 'arraybuffer',
     headers: {
       Range: `bytes=${start}-${end}`,
