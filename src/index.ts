@@ -38,8 +38,8 @@ class Download extends EventEmitter<
   isReady: boolean = false;
   abortController?: AbortController;
   currentChunk: number = 0;
-  totalChunk: number = 1;
   chunkSize: number;
+  totalChunk: number = 1;
   totalSize: number = 0;
   status: STATUS = STATUS.PENDING;
 
@@ -64,18 +64,6 @@ class Download extends EventEmitter<
     });
   }
 
-  async init() {
-    const totalSize = await this.getFileSize();
-    const md5 = await this.getURLMd5();
-    const keys = await localforage.keys();
-    if (Array.isArray(keys) && keys.length) {
-      const chunks = keys.filter((key) => key.startsWith(`${md5}_`));
-      this.currentChunk = chunks.length;
-    }
-    this.totalSize = totalSize;
-    this.totalChunk = Math.ceil(this.totalSize / this.chunkSize);
-  }
-
   async openDB() {
     try {
       this.changeStatus(STATUS.PENDING);
@@ -88,6 +76,40 @@ class Download extends EventEmitter<
     }
   }
 
+  async getCompletedCount(): Promise<number> {
+    const md5 = this.getURLMd5();
+    const keys = await localforage.keys();
+    return keys.filter((k) => k.startsWith(`${md5}_`)).length;
+  }
+
+  async getResumePosition() {
+    const md5 = this.getURLMd5();
+    const keys = await localforage.keys();
+    const chunkKeys = keys.filter((k) => k.startsWith(`${md5}_`));
+
+    // 找出所有已下载的 chunk 索引
+    const downloadedIndices = chunkKeys
+      .map((k) => parseInt(k.split('_')[1]!, 10))
+      .filter((n) => !isNaN(n));
+
+    // 找到第一个缺失作为下次开始位置，这样规避中间漏上传的问题
+    let chunkIndex = 0;
+    const set = new Set(downloadedIndices);
+    while (set.has(chunkIndex)) {
+      chunkIndex++;
+    }
+    return chunkIndex;
+  }
+
+  async init() {
+    const totalSize = await this.getFileSize();
+    this.totalSize = totalSize;
+    this.totalChunk = Math.ceil(this.totalSize / this.chunkSize);
+
+    this.currentChunk = await this.getResumePosition();
+    this.updateProgress();
+  }
+
   getURLMd5 = (() => {
     let md5Value: string;
     return () => {
@@ -98,16 +120,26 @@ class Download extends EventEmitter<
     };
   })();
 
-  getFileSize = (() => {
-    let length: number;
-    return async () => {
-      if (length) {
-        return length;
-      }
-      const data = await axios.head(this.url);
-      return (length = data.headers['content-length']);
-    };
-  })();
+  async getFileSize() {
+    try {
+      const { headers } = await axios.head(this.url);
+      let len = headers['content-length'];
+      if (len) return Number(len);
+    } catch {}
+
+    // 兜底
+    const { headers } = await axios.get(this.url, {
+      headers: { Range: 'bytes=0-0' },
+      responseType: 'arraybuffer',
+    });
+    const cr = headers['content-range'];
+    if (cr) {
+      const match = cr.match(/\/(\d+)$/);
+      if (match) return Number(match[1]);
+    }
+
+    throw new Error('无法获取文件大小');
+  }
 
   getCurrentChunkName(currentChunk: number) {
     const md5 = this.getURLMd5();
@@ -130,11 +162,11 @@ class Download extends EventEmitter<
     this.abortController = new AbortController();
   }
 
-  updateProgress() {
-    this.emit(
-      EVENTS.PROGRESS_UPDATE,
-      ((this.currentChunk / this.totalChunk) * 100).toFixed(2),
-    );
+  async updateProgress() {
+    // 异步并发下载，取实际已经下载好的
+    const completed = await this.getCompletedCount();
+    const percent = ((completed / this.totalChunk) * 100).toFixed(2);
+    this.emit(EVENTS.PROGRESS_UPDATE, percent);
   }
 
   start() {
@@ -150,7 +182,8 @@ class Download extends EventEmitter<
     this.abort();
   }
 
-  resume() {
+  async resume() {
+    this.currentChunk = await this.getResumePosition();
     this.changeStatus(STATUS.DOWNLOADING);
     this.download();
   }
@@ -165,10 +198,15 @@ class Download extends EventEmitter<
   }
 
   async uploadSingeChunk(currentChunk: number) {
+    const chunkName = this.getCurrentChunkName(currentChunk);
+    if (await localforage.getItem(chunkName)) {
+      this.updateProgress();
+      return;
+    }
+
     const start = currentChunk * this.chunkSize;
     const end = Math.min(start + this.chunkSize - 1, this.totalSize - 1);
     const arrayBuffer = await this.getChunkData(start, end);
-    const chunkName = this.getCurrentChunkName(currentChunk);
     await localforage.setItem(chunkName, new Blob([arrayBuffer]));
     this.updateProgress();
   }
@@ -185,14 +223,12 @@ class Download extends EventEmitter<
         if (pool.length >= concurrency) {
           await Promise.race(pool);
         }
-
-        const p = run(this.currentChunk).finally(() => {
+        const chunkToDownload = this.currentChunk++;
+        const p = run(chunkToDownload).finally(() => {
           const index = pool.indexOf(p);
           index > -1 && pool.splice(index, 1);
         });
-
         pool.push(p);
-        this.currentChunk += 1;
       }
       await Promise.all(pool);
       this.changeStatus(STATUS.FINISHED);
@@ -205,13 +241,26 @@ class Download extends EventEmitter<
 
   async remove() {
     const md5 = this.getURLMd5();
-    for (let i = 0; i < this.totalChunk; i++) {
-      await localforage.removeItem(`${md5}_${i}`);
-    }
+    const prefix = `${md5}_`;
+    const keys = await localforage.keys();
+    await Promise.all(
+      keys
+        .filter((k) => k.startsWith(prefix))
+        .map((k) => localforage.removeItem(k)),
+    );
   }
 
   async mergeAndDownload() {
     try {
+      // 校验数据完整
+      const completed = await this.getCompletedCount();
+      if (completed < this.totalChunk) {
+        this.changeStatus(
+          STATUS.ERROR,
+          new Error(`下载不完整，请取消再重新下载`),
+        );
+        return;
+      }
       const md5 = this.getURLMd5();
       const promises: Promise<any>[] = [];
       for (let i = 0; i < this.totalChunk; i++) {
