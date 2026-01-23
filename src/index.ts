@@ -93,7 +93,6 @@ class Download {
 
   async getResumePosition() {
     const chunkKeys = await this.getChunkKeys();
-
     const downloadedIndices = chunkKeys
       .map((k) => parseInt(k.split('_')[1]!, 10))
       .filter((n) => !isNaN(n));
@@ -285,6 +284,10 @@ class Download {
     } catch (error) {
       this.changeStatus(STATUS.ERROR, error);
     }
+  }
+
+  destroy() {
+    this.abort();
   }
 }
 
