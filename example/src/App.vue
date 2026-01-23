@@ -67,6 +67,14 @@ const handleDownload = ()=> {
 const handleMerge = ()=> {
   download.mergeAndDownload()
 }
+
+const handlePause = () => {
+  download.pause()
+}
+
+const handleResume = ()=> {
+ download.resume()
+}
 </script>
 
 <template>
@@ -74,5 +82,7 @@ const handleMerge = ()=> {
     <div>{{ progress }}</div>
     <div>{{ status }}</div>
     <button @click="handleDownload" :disabled="!isReady">开始</button>
+    <button @click="handlePause" :disabled="!isReady">暂停</button>
+    <button @click="handleResume" :disabled="!isReady">继续</button>
     <button @click="handleMerge" :disabled="!isReady">合并</button>
 </template>

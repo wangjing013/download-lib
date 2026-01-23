@@ -1,4 +1,3 @@
-import axios from 'axios';
 import EventEmitter from 'eventemitter3';
 import localforage from 'localforage';
 import { md5 } from 'js-md5';
@@ -87,11 +86,9 @@ class Download extends EventEmitter<
     const keys = await localforage.keys();
     const chunkKeys = keys.filter((k) => k.startsWith(`${md5}_`));
 
-    // 找出所有已下载的 chunk 索引
     const downloadedIndices = chunkKeys
       .map((k) => parseInt(k.split('_')[1]!, 10))
       .filter((n) => !isNaN(n));
-
     // 找到第一个缺失作为下次开始位置，这样规避中间漏上传的问题
     let chunkIndex = 0;
     const set = new Set(downloadedIndices);
@@ -105,7 +102,6 @@ class Download extends EventEmitter<
     const totalSize = await this.getFileSize();
     this.totalSize = totalSize;
     this.totalChunk = Math.ceil(this.totalSize / this.chunkSize);
-
     this.currentChunk = await this.getResumePosition();
     this.updateProgress();
   }
@@ -122,17 +118,19 @@ class Download extends EventEmitter<
 
   async getFileSize() {
     try {
-      const { headers } = await axios.head(this.url);
-      let len = headers['content-length'];
+      const { headers } = await fetch(this.url, {
+        method: 'HEAD',
+      });
+      let len = headers.get('content-length');
       if (len) return Number(len);
     } catch {}
 
     // 兜底
-    const { headers } = await axios.get(this.url, {
+    const { headers } = await fetch(this.url, {
+      method: 'GET',
       headers: { Range: 'bytes=0-0' },
-      responseType: 'arraybuffer',
     });
-    const cr = headers['content-range'];
+    const cr = headers.get('content-range');
     if (cr) {
       const match = cr.match(/\/(\d+)$/);
       if (match) return Number(match[1]);
@@ -147,14 +145,13 @@ class Download extends EventEmitter<
   }
 
   async getChunkData(start: number, end: number) {
-    const { data } = await axios.get(this.url, {
-      responseType: 'arraybuffer',
+    const response = await fetch(this.url, {
       headers: {
         Range: `bytes=${start}-${end}`,
       },
       signal: this.abortController?.signal,
     });
-    return data;
+    return response.arrayBuffer();
   }
 
   abort() {
@@ -223,8 +220,8 @@ class Download extends EventEmitter<
         if (pool.length >= concurrency) {
           await Promise.race(pool);
         }
-        const chunkToDownload = this.currentChunk++;
-        const p = run(chunkToDownload).finally(() => {
+
+        const p = run(this.currentChunk++).finally(() => {
           const index = pool.indexOf(p);
           index > -1 && pool.splice(index, 1);
         });
@@ -261,6 +258,7 @@ class Download extends EventEmitter<
         );
         return;
       }
+
       const md5 = this.getURLMd5();
       const promises: Promise<any>[] = [];
       for (let i = 0; i < this.totalChunk; i++) {
@@ -278,7 +276,6 @@ class Download extends EventEmitter<
       URL.revokeObjectURL(tempURL);
 
       // fix: Safari 的 new Blob([blob1, blob2, ...]) 并不保证立即深拷贝所有数据，它在内存压力大时会偷偷保留对原 BlobPart 的引用，等真正需要写入磁盘时再去读。
-      // 这里不能理解删除，某则下载不成功
       setTimeout(async () => {
         await this.remove(); // 删 IndexedDB 中的 chunk
         this.changeStatus(STATUS.PENDING); // 恢复初始状态
