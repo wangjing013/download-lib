@@ -1,10 +1,13 @@
-import EventEmitter from 'eventemitter3';
 import localforage from 'localforage';
 import { md5 } from 'js-md5';
 
 export type DownloadOptions = {
   url: string;
   fileName: string;
+  onReady?: () => void;
+  onStatusChange?: (data: { status: STATUS; error: any }) => void;
+  onProgressUpdate?: (value: string) => void;
+  onError?: (error: any) => void;
   chunkSize?: number;
 };
 
@@ -22,13 +25,7 @@ enum EVENTS {
   PROGRESS_UPDATE = 'progress_update',
 }
 
-class Download extends EventEmitter<
-  EVENTS,
-  {
-    status: STATUS;
-    error: any;
-  }
-> {
+class Download {
   static EVENTS = EVENTS;
   static STATUS = STATUS;
 
@@ -41,23 +38,31 @@ class Download extends EventEmitter<
   totalChunk: number = 1;
   totalSize: number = 0;
   status: STATUS = STATUS.PENDING;
+  onReady: DownloadOptions['onReady'];
+  onStatusChange: DownloadOptions['onStatusChange'];
+  onProgressUpdate: DownloadOptions['onProgressUpdate'];
 
   constructor({
     url,
     fileName,
     chunkSize = 10 * 1024 * 1024,
+    onReady,
+    onProgressUpdate,
+    onStatusChange,
   }: DownloadOptions) {
-    super();
     this.url = url;
     this.fileName = fileName;
     this.chunkSize = chunkSize;
     this.abortController = new AbortController();
+    this.onReady = onReady;
+    this.onProgressUpdate = onProgressUpdate;
+    this.onStatusChange = onStatusChange;
     this.openDB();
   }
 
   changeStatus(value: STATUS, error: any = null) {
     this.status = value;
-    this.emit(EVENTS.STATUS_UPDATE, {
+    this.onStatusChange?.({
       status: value,
       error,
     });
@@ -68,23 +73,26 @@ class Download extends EventEmitter<
       this.changeStatus(STATUS.PENDING);
       await localforage.ready();
       await this.init();
-      this.emit(EVENTS.READY);
+      this.onReady?.();
       this.isReady = true;
     } catch (error) {
       this.changeStatus(STATUS.ERROR, error);
     }
   }
 
-  async getCompletedCount(): Promise<number> {
+  async getChunkKeys() {
     const md5 = this.getURLMd5();
     const keys = await localforage.keys();
-    return keys.filter((k) => k.startsWith(`${md5}_`)).length;
+    return keys.filter((k) => k.startsWith(`${md5}_`));
+  }
+
+  async getCompletedCount(): Promise<number> {
+    const keys = await this.getChunkKeys();
+    return keys.length;
   }
 
   async getResumePosition() {
-    const md5 = this.getURLMd5();
-    const keys = await localforage.keys();
-    const chunkKeys = keys.filter((k) => k.startsWith(`${md5}_`));
+    const chunkKeys = await this.getChunkKeys();
 
     const downloadedIndices = chunkKeys
       .map((k) => parseInt(k.split('_')[1]!, 10))
@@ -163,7 +171,7 @@ class Download extends EventEmitter<
     // 异步并发下载，取实际已经下载好的
     const completed = await this.getCompletedCount();
     const percent = ((completed / this.totalChunk) * 100).toFixed(2);
-    this.emit(EVENTS.PROGRESS_UPDATE, percent);
+    this.onProgressUpdate?.(percent);
   }
 
   start() {
@@ -237,14 +245,8 @@ class Download extends EventEmitter<
   }
 
   async remove() {
-    const md5 = this.getURLMd5();
-    const prefix = `${md5}_`;
-    const keys = await localforage.keys();
-    await Promise.all(
-      keys
-        .filter((k) => k.startsWith(prefix))
-        .map((k) => localforage.removeItem(k)),
-    );
+    const keys = await this.getChunkKeys();
+    await Promise.all(keys.map((k) => localforage.removeItem(k)));
   }
 
   async mergeAndDownload() {
