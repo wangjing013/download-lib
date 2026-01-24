@@ -15,6 +15,7 @@ export default defineConfig({
       fileName: 'download-lib',
     },
     outDir: 'lib',
+    copyPublicDir: false,
     emptyOutDir: true,
   },
   plugins: [
