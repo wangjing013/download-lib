@@ -1,10 +1,9 @@
 {
   "name": "msb-file",
-  "version": "0.0.1",
-  "type": "module",
-  "main": "lib/download-lib.cjs.js",
-  "module": "lib/download-lib.es.js",
-  "types": "lib/download-lib.d.ts",
+  "version": "0.0.5",
+  "main": "lib/msb-file.cjs.js",
+  "module": "lib/msb-file.es.js",
+  "types": "lib/msb-file.d.ts",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -15,11 +14,11 @@
     "README.md",
     "lib"
   ],
-  "dependencies": {
-    "@types/streamsaver": "^2.0.5",
+  "peerDependencies": {
     "js-md5": "^0.8.3",
     "localforage": "^1.10.0",
-    "streamsaver": "^2.0.6"
+    "streamsaver": "^2.0.6",
+    "@types/streamsaver": "^2.0.5"
   },
   "devDependencies": {
     "@babel/core": "^7.28.6",

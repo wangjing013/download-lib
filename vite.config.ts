@@ -12,12 +12,13 @@ export default defineConfig({
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
-      formats: ['es', 'cjs'],
-      fileName: (format) => `download-lib.${format}.js`,
+      formats: ['cjs', 'es'],
+      fileName: (format) => `msb-file.${format}.js`,
     },
     outDir: 'lib',
     copyPublicDir: false,
     rollupOptions: {
+      external: ['localforage', 'streamsaver', 'js-md5'],
       plugins: [babel({
         extensions: ['.js' ,'.ts']
       })]

@@ -1,18 +1,18 @@
 import localforage from 'localforage';
 import { md5 } from 'js-md5';
-import streamsaver from 'streamsaver';
 
 export type DownloadOptions = {
   url: string;
   fileName: string;
+  mitmPath?: string;
   onReady?: () => void;
-  onStatusChange?: (data: { status: STATUS; error: any }) => void;
-  onProgressUpdate?: (value: string) => void;
+  onStatusChange?: (status: STATUS, error: any ) => void;
+  onProgress?: (value: string) => void;
   onError?: (error: any) => void;
   chunkSize?: number;
 };
 
-export enum STATUS {
+enum STATUS {
   PENDING = 'pending',
   PAUSE = 'pause',
   DOWNLOADING = 'downloading',
@@ -33,6 +33,7 @@ class Download {
   url: string;
   fileName: string;
   isReady: boolean = false;
+  mitmPath?: string;
   abortController?: AbortController;
   currentChunk: number = 0;
   chunkSize: number;
@@ -41,36 +42,36 @@ class Download {
   status: STATUS = STATUS.PENDING;
   onReady: DownloadOptions['onReady'];
   onStatusChange: DownloadOptions['onStatusChange'];
-  onProgressUpdate: DownloadOptions['onProgressUpdate'];
+  onProgress: DownloadOptions['onProgress'];
 
   constructor({
     url,
     fileName,
     chunkSize = 10 * 1024 * 1024,
+    mitmPath,
     onReady,
-    onProgressUpdate,
+    onProgress,
     onStatusChange,
   }: DownloadOptions) {
     this.url = url;
     this.fileName = fileName;
     this.chunkSize = chunkSize;
+    this.mitmPath = mitmPath;
     this.abortController = new AbortController();
     this.onReady = onReady;
-    this.onProgressUpdate = onProgressUpdate;
+    this.onProgress = onProgress;
     this.onStatusChange = onStatusChange;
     this.openDB();
   }
 
-  static setMitmPath(path: string) {
-    streamsaver.mitm = path;
+  static async setMitmPath(path: string) {
+    const mod = await import('streamsaver')
+    mod.default.mitm = path;
   }
 
   changeStatus(value: STATUS, error: any = null) {
     this.status = value;
-    this.onStatusChange?.({
-      status: value,
-      error,
-    });
+    this.onStatusChange?.(value , error);
   }
 
   async openDB() {
@@ -175,7 +176,7 @@ class Download {
     // 异步并发下载，取实际已经下载好的
     const completed = await this.getCompletedCount();
     const percent = ((completed / this.totalChunk) * 100).toFixed(2);
-    this.onProgressUpdate?.(percent);
+    this.onProgress?.(percent);
   }
 
   resetState() {
@@ -205,8 +206,8 @@ class Download {
 
   async cancel() {
     this.abort();
+    await this.remove();
     this.resetState();
-    this.remove();
   }
 
   async uploadSingeChunk(currentChunk: number) {
@@ -270,7 +271,11 @@ class Download {
       );
       return;
     }
-    const fileStream = streamsaver.createWriteStream(this.fileName, {
+    const mod = await import('streamsaver');
+    if(this.mitmPath){
+      mod.default.mitm = this.mitmPath;
+    }
+    const fileStream = mod.default.createWriteStream(this.fileName, {
       size: this.totalSize,
     });
     const writer = fileStream.getWriter();
@@ -303,8 +308,9 @@ class Download {
   destroy() {
     this.abort();
   }
-}
+};
 
 export {
   Download
 } ;
+
