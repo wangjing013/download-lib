@@ -12,7 +12,7 @@ export type DownloadOptions = {
   chunkSize?: number;
 };
 
-enum STATUS {
+export enum STATUS {
   PENDING = 'pending',
   PAUSE = 'pause',
   DOWNLOADING = 'downloading',
@@ -189,6 +189,12 @@ class Download {
     if (!this.isReady) {
       return;
     }
+    // 针对文本文件，直接下载
+    if (this.url.endsWith('.txt')){
+      this.downloadText();
+      return;
+    }
+
     this.changeStatus(STATUS.DOWNLOADING);
     this.download();
   }
@@ -222,6 +228,23 @@ class Download {
     const arrayBuffer = await this.getChunkData(start, end);
     await localforage.setItem(chunkName, new Blob([arrayBuffer]));
     this.updateProgress();
+  }
+
+
+  async downloadText() {
+    const blob = await fetch(this.url).then((res) => res.blob());
+    const mod = await import('streamsaver');
+    const fileStream = mod.default.createWriteStream(this.fileName, {
+      size: this.totalSize,
+    });
+    const writer = fileStream.getWriter();
+    const reader = (blob as Blob).stream().getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      await writer.write(value);
+    }
+    await writer.close();
   }
 
   async download() {

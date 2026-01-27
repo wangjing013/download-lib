@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import Download, { type STATUS} from '../../src/index'
+import  { Download, type STATUS } from '../../src/index'
 
 const isReady = ref<boolean>(false)
 const progress = ref<string>('0')
@@ -13,10 +13,10 @@ const download = new Download({
   onReady() {
     isReady.value = true
   },
-  onStatusChange(data) {
-    status.value = data.status
+  onStatusChange(value, error) {
+    status.value = value
   },
-  onProgressUpdate(value) {
+  onProgress(value: string) {
     progress.value = value
   },
 })
