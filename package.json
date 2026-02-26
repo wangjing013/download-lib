@@ -1,6 +1,6 @@
 {
   "name": "msb-file",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "main": "lib/msb-file.cjs.js",
   "module": "lib/msb-file.es.js",
   "types": "lib/msb-file.d.ts",

@@ -32,7 +32,6 @@ class Download {
 
   url: string;
   fileName: string;
-  isReady: boolean = false;
   mitmPath?: string;
   abortController?: AbortController;
   currentChunk: number = 0;
@@ -61,7 +60,8 @@ class Download {
     this.onReady = onReady;
     this.onProgress = onProgress;
     this.onStatusChange = onStatusChange;
-    this.openDB();
+    this.changeStatus(STATUS.PENDING);
+    this.checkDBReady();
   }
 
   static async setMitmPath(path: string) {
@@ -74,16 +74,25 @@ class Download {
     this.onStatusChange?.(value , error);
   }
 
-  async openDB() {
+  async checkDBReady () {
     try {
-      this.changeStatus(STATUS.PENDING);
       await localforage.ready();
-      await this.init();
       this.onReady?.();
-      this.isReady = true;
+    } catch (e) {
+      this.changeStatus(STATUS.ERROR, e);
+    }
+  } 
+  
+  private async getMetadata() {
+    try {
+      const totalSize = await this.getFileSize();
+      this.currentChunk = await this.getResumePosition();
+      this.totalSize = totalSize;
+      this.totalChunk = Math.ceil(this.totalSize / this.chunkSize);
+      this.updateProgress();
     } catch (error) {
       this.changeStatus(STATUS.ERROR, error);
-    }
+    }   
   }
 
   async getChunkKeys() {
@@ -109,14 +118,6 @@ class Download {
       chunkIndex++;
     }
     return chunkIndex;
-  }
-
-  async init() {
-    const totalSize = await this.getFileSize();
-    this.totalSize = totalSize;
-    this.totalChunk = Math.ceil(this.totalSize / this.chunkSize);
-    this.currentChunk = await this.getResumePosition();
-    this.updateProgress();
   }
 
   getURLMd5 = (() => {
@@ -185,16 +186,13 @@ class Download {
     this.changeStatus(STATUS.PENDING);
   }
 
-  start() {
-    if (!this.isReady) {
-      return;
-    }
+  async start() {
+    await this.getMetadata();
     // 针对文本文件，直接下载
     if (this.url.endsWith('.txt')){
       this.downloadText();
       return;
     }
-
     this.changeStatus(STATUS.DOWNLOADING);
     this.download();
   }
@@ -247,6 +245,30 @@ class Download {
     await writer.close();
   }
 
+  private isRecoverableError(error: any): boolean {
+    const message = error?.message?.toLowerCase() ?? '';
+    return (
+      message.includes('network') ||
+      message.includes('timeout') ||
+      message.includes('connection') ||
+      error?.code === 'ECONNRESET'
+    );
+  }
+
+  private async autoRetry(retries = 3) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+        await this.resume();
+        return;
+      } catch (error) {
+        if (i === retries - 1) {
+          this.changeStatus(STATUS.ERROR, error);
+        }
+      }
+    }
+  }
+
   async download() {
     try {
       const concurrency = 4;
@@ -275,7 +297,15 @@ class Download {
       if (err && err.name === 'AbortError') {
         return;
       }
-      this.changeStatus(STATUS.ERROR, error);
+      
+      // 网络中断
+      if (this.isRecoverableError(err)) {
+        this.changeStatus(STATUS.PAUSE, error);
+        this.autoRetry();
+      } else {
+        // 不可恢复的错误 → 需要用户手动处理
+        this.changeStatus(STATUS.ERROR, error);
+      }
     }
   }
 
