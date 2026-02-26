@@ -246,12 +246,15 @@ class Download {
   }
 
   private isRecoverableError(error: any): boolean {
-    const message = error?.message?.toLowerCase() ?? '';
+    if (!error) {
+      return false;
+    }
+    const message = error.message ? error.message.toLowerCase() : "";
     return (
-      message.includes('network') ||
-      message.includes('timeout') ||
-      message.includes('connection') ||
-      error?.code === 'ECONNRESET'
+      message.indexOf('network') !== -1 ||
+      message.indexOf('timeout') !== -1 ||
+      message.indexOf('connection') !== -1 ||
+      error.code === 'ECONNRESET'
     );
   }
 
