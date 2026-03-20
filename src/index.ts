@@ -64,11 +64,6 @@ class Download {
     this.checkDBReady();
   }
 
-  static async setMitmPath(path: string) {
-    const mod = await import('streamsaver')
-    mod.default.mitm = path;
-  }
-
   changeStatus(value: STATUS, error: any = null) {
     this.status = value;
     this.onStatusChange?.(value , error);
@@ -231,18 +226,14 @@ class Download {
 
   async downloadText() {
     const blob = await fetch(this.url).then((res) => res.blob());
-    const mod = await import('streamsaver');
-    const fileStream = mod.default.createWriteStream(this.fileName, {
-      size: this.totalSize,
-    });
-    const writer = fileStream.getWriter();
-    const reader = (blob as Blob).stream().getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      await writer.write(value);
-    }
-    await writer.close();
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = this.fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
   }
 
   private isRecoverableError(error: any): boolean {
@@ -327,37 +318,35 @@ class Download {
       );
       return;
     }
-    const mod = await import('streamsaver');
-    if(this.mitmPath){
-      mod.default.mitm = this.mitmPath;
-    }
-    const fileStream = mod.default.createWriteStream(this.fileName, {
-      size: this.totalSize,
-    });
-    const writer = fileStream.getWriter();
-    const md5 = this.getURLMd5();
-
+ 
     try {
+      const md5 = this.getURLMd5();
+      const blobs: Blob[] = [];
+      // 1. 从 IndexedDB 按顺序读取所有分块
       for (let i = 0; i < this.totalChunk; i++) {
-        const blob = (await localforage.getItem(`${md5}_${i}`)) as Blob;
-        if (!blob) throw new Error(`Chunk ${i} missed!`);
-        const reader = (blob as Blob).stream().getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          await writer.write(value);
-        }
+        const chunk = await localforage.getItem<Blob>(`${md5}_${i}`);
+        if (!chunk) throw new Error(`丢失分块: ${i}`);
+        blobs.push(chunk);
       }
-      await writer.close();
+      // 2. 合并生成最终的 blob
+      const finalBlob = new Blob(blobs, { type: 'application/octet-stream' });
+      // 3. 触发浏览器下载
+      const downloadUrl = URL.createObjectURL(finalBlob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = this.fileName;
+      document.body.appendChild(link);
+      link.click();
 
       // fix: Safari 的 new Blob([blob1, blob2, ...]) 并不保证立即深拷贝所有数据，它在内存压力大时会偷偷保留对原 BlobPart 的引用，等真正需要写入磁盘时再去读。
       setTimeout(async () => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(downloadUrl);
         await this.remove(); // 删 IndexedDB 中的 chunk
         this.resetState();
       }, 2000);
     } catch (err) {
       this.changeStatus(STATUS.ERROR, err);
-      writer.abort && writer.abort(err); // 兼容 StreamSaver
     }
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "msb-file",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "main": "lib/msb-file.cjs.js",
   "module": "lib/msb-file.es.js",
   "types": "lib/msb-file.d.ts",
@@ -15,10 +15,9 @@
     "lib"
   ],
   "peerDependencies": {
+    "@types/streamsaver": "^2.0.5",
     "js-md5": "^0.8.3",
-    "localforage": "^1.10.0",
-    "streamsaver": "^2.0.6",
-    "@types/streamsaver": "^2.0.5"
+    "localforage": "^1.10.0"
   },
   "devDependencies": {
     "@babel/core": "^7.28.6",
